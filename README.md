@@ -1,22 +1,53 @@
-# 칼로그 (callog) — 식단 칼로리 AI 분석 (앱인토스 미니앱)
+# 칼로그 (Callog) — 사진 기반 칼로리 추정
 
-사진 한 장으로 식사 칼로리·영양을 분석하는 [앱인토스](https://toss.im) 미니앱. 광고 기반 무료, 토스 3천만 유저 대상.
+사진 한 장으로 식사의 칼로리와 영양을 추정하는 앱인토스 미니앱입니다. 멀티모달 LLM의 반복적인 과소추정을 프롬프트만으로 감추지 않고, 실측 벤치마크와 5단계 보정 파이프라인으로 줄였습니다.
 
-> 코드는 비공개(상용 앱). 이 저장소는 프로젝트 설명·스크린샷입니다.
+> 상용 앱 소스는 비공개입니다. 이 저장소는 문제 정의, 실제 화면, 설계와 검증 결과를 공개합니다.
 
 <p>
-  <img src="screenshots/01_today.png" width="220">
-  <img src="screenshots/02_analysis.png" width="220">
+  <img src="screenshots/01_today.png" width="300" alt="칼로그 오늘 화면">
+  <img src="screenshots/02_analysis.png" width="300" alt="칼로그 분석 화면">
 </p>
 
-## 핵심
-- **사진 → AI 칼로리 분석** — 멀티모달 LLM(vision)로 음식 인식·칼로리/영양 추정. 음식별 위치 라벨링(grounding으로 정확도↑)
-- **정확도 엔진** — CalorieCLIP 앙상블(비용0 정확도 +10%p) + 기준물체 캘리브레이션 프롬프트. Nutrition5k 벤치로 MAPE 46→35% 개선
-- **수익·비용 설계** — 분석당 전면광고로 AI 비용 충당, 전역 rate limit·OpenAI 지출캡으로 폭주 방어. 건강 미션 포인트(토스 비즈월렛 예산캡)
-- **서버리스 백엔드** — Vercel serverless + Supabase, 식약처 영양 DB 28만 건
+## 한눈에 보기
 
-## 기술
-React 19 · Vite · 앱인토스(Granite) · Vercel serverless · Supabase Postgres · OpenAI vision · Railway(CalorieCLIP 워커)
+| | |
+|---|---|
+| **Role** | 제품·AI 파이프라인 1인 설계·구현 |
+| **Problem** | 피자·파스타 등 고열량 음식의 반복적인 과소추정과 결과 흔들림 |
+| **Build** | 기준물체·영양 DB·CalorieCLIP·규칙 보정·2-tier 모델 폴백 |
+| **Proof** | Nutrition5k 통과율 **70→88%**, 중앙 오차율(MAPE) **31→19%** |
 
-## 상태
-출시·운영 중. 토스 바이브코딩 챌린지 제출작
+## 해결 구조
+
+```text
+이미지 입력
+  → 기준물체 캘리브레이션 + grounding
+  → 식약처 영양 DB 그라운딩
+  → CalorieCLIP 앙상블 (과소추정 방어에만 제한 적용)
+  → 규칙 기반 보정 엔진
+  → 저신뢰 결과만 상위 모델로 폴백
+```
+
+- 기준물체로 양을 추정하고 식약처 영양 DB 28.2만 건으로 품목을 보정합니다.
+- CalorieCLIP 결과는 과소추정 방어 조건을 통과할 때만 반영합니다.
+- 확신이 낮은 요청만 상위 모델로 보내 정확도와 비용을 함께 관리합니다.
+
+## 검증
+
+Nutrition5k 50개 요리를 고정 평가셋으로 사용했습니다. 파이프라인 변경마다 같은 입력을 다시 실행해 통과율과 MAPE를 비교했습니다.
+
+| Metric | Baseline | Current |
+|---|---:|---:|
+| 허용 오차 기준 통과율 | 70% | **88%** |
+| 중앙 오차율(MAPE) | 31% | **19%** |
+
+보정 엔진은 통계 모델이 아니라 도메인 규칙입니다. 따라서 위 수치는 50개 평가셋 기준이며, 더 넓은 음식 분포에 대한 일반화 한계가 있습니다.
+
+## Stack
+
+TypeScript · React · Vercel Serverless · Postgres · OpenAI Vision · Python · HuggingFace CalorieCLIP
+
+## Status
+
+출시·운영 중 · 토스 바이브코딩 챌린지 제출작
